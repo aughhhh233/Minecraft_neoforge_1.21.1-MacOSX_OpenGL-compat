@@ -53,6 +53,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Cache fetched shader-toolchain deps
+        uses: actions/cache@v4
+        with:
+          path: native/build/_deps
+          key: deps-${{ runner.os }}-${{ hashFiles('native/CMakeLists.txt') }}
+
       - name: Configure (CMake)
         run: cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
 
@@ -80,6 +86,9 @@ jobs:
             exit 0
           fi
           exit $code
+
+      - name: Run transpiler smoke test (glslang + SPIRV-Cross, CPU — must pass)
+        run: ./native/build/transpiler_smoke
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4
