@@ -8,6 +8,8 @@ import org.lwjgl.system.FunctionProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
+
 /**
  * Wires the interception layer into LWJGL.
  *
@@ -65,13 +67,43 @@ public final class CompatInstaller {
             }
 
             provider = new InterceptingFunctionProvider(real);
-            MacGLCompatAPI.markActive(true);
-            LOG.info("Interception provider built (will report GL_VERSION '{}'). "
-                    + "Phase 1: swap into LWJGL before createCapabilities.",
-                    NativeBridge.spoofedVersionString());
+            boolean swapped = swapProviderField(provider);
+            MacGLCompatAPI.markActive(swapped);
+            if (swapped) {
+                LOG.info("Interception installed (GL_VERSION will read '{}').",
+                        NativeBridge.spoofedVersionString());
+            } else {
+                LOG.warn("Provider built but field swap failed; staying on plain 4.1.");
+            }
         } catch (Throwable t) {
             // A failure here must never take down the game.
             LOG.error("MacGLCompat install failed; continuing on plain OpenGL 4.1.", t);
+        }
+    }
+
+    /**
+     * Replace LWJGL {@code GL}'s private static {@code functionProvider} field with our
+     * wrapper. LWJGL 3.3.3 exposes {@link GL#getFunctionProvider()} but no setter, so a
+     * reflective field swap is the supported-in-practice mechanism. Must run before
+     * {@code GL.createCapabilities()} (called from
+     * {@code com.mojang.blaze3d.platform.Window}'s constructor) — Phase 2 drives this
+     * from a Window mixin once on-Mac timing is confirmed; calling it here is harmless if
+     * capabilities already exist (our provider simply goes unused).
+     *
+     * @return true if the field was replaced.
+     */
+    public static boolean swapProviderField(FunctionProvider wrapper) {
+        try {
+            Field f = GL.class.getDeclaredField("functionProvider");
+            f.setAccessible(true);
+            f.set(null, wrapper);
+            return true;
+        } catch (NoSuchFieldException e) {
+            LOG.error("LWJGL GL.functionProvider field not found — LWJGL internals changed.", e);
+            return false;
+        } catch (Throwable t) {
+            LOG.error("Could not swap GL.functionProvider (module access?).", t);
+            return false;
         }
     }
 }
