@@ -18,7 +18,9 @@ typedef struct {
 
 MacGLContext* macgl_context(void);
 bool          macgl_initialize(void);
-void*         macgl_function_address(const char* gl_name);
+
+// Trampoline resolution lives in trampolines.h (pure C, no Metal) so C-only consumers
+// can use it without pulling in Metal headers.
 
 // --- Phase 1a: IOSurface <-> MTLTexture bridge -----------------------------
 //

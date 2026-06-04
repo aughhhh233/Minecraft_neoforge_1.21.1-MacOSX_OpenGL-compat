@@ -87,6 +87,9 @@ jobs:
           fi
           exit $code
 
+      - name: Run trampoline tests (resolution + glGetString spoof, CPU — must pass)
+        run: ./native/build/trampoline_test
+
       - name: Run transpiler tests (GLSL->SPIR-V->MSL, CPU — must pass)
         run: ./native/build/transpiler_test
 

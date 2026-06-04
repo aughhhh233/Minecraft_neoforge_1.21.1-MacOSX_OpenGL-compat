@@ -65,6 +65,7 @@ add_library(macglcompat SHARED
     src/bridge.m
     src/compute.m
     src/iosurface.m
+    src/trampolines.c
 )
 target_include_directories(macglcompat PRIVATE
     ${JNI_INCLUDE_DIRS}
@@ -95,6 +96,11 @@ target_include_directories(headless_iosurface_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(headless_iosurface_test PRIVATE
     "-framework Foundation" "-framework Metal" "-framework IOSurface")
+
+# Trampoline resolution + glGetString version spoof (B) — pure C, runs on CI.
+add_executable(trampoline_test test/trampoline_test.c src/trampolines.c)
+target_include_directories(trampoline_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Transpiler (A2) + its unit tests (A3) — pure CPU, ACTUALLY RUN on CI. Translates
 # GLSL compute -> SPIR-V -> MSL and asserts the output. No GPU needed.

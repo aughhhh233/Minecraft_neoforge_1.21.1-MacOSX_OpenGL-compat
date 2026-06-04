@@ -30,9 +30,12 @@ too late.
   (SPIRV-Cross), in `native/src/transpiler.cpp`. Pure CPU.
 - **A3 done (CI):** `transpiler_test` asserts MSL output for a real SSBO compute shader
   and that bad GLSL fails cleanly. Runs on CI without a GPU.
-- **B (next, no Mac):** function-pointer trampolines — `glDispatchCompute` →
-  `MTLComputeCommandEncoder`, image load/store, DSA buffer/texture creation, the
-  `glGetString` version spoof. Author + compile-check.
+- **B done (CI):** function-pointer trampolines (`native/src/trampolines.c`). The
+  `glGetString` version spoof is fully implemented + CPU-tested (reports 4.6, delegates
+  other queries to the real driver). `glDispatchCompute`/`glMemoryBarrier`/
+  `glBindImageTexture` are registered stubs (resolution wired; Metal bodies are Phase 2,
+  Mac). `trampoline_test` runs on CI. Real fn pointers passed down via
+  `NativeBridge.setRealFunction` (CompatInstaller captures real glGetString).
 - **Mac-only remainder:** MSL → `MTLLibrary` compile, real dispatch, and getting
   **Solas Shader** to actually render. Plus the Window mixin timing (D2).
 - Note (from D1): Iris needs image load/store + compute + DSA, **not** SSBO remapping.

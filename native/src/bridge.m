@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "macglcompat.h"
+#include "trampolines.h"
 
 // Device/queue bring-up + function resolution live in core.m so test executables
 // can link them without jni.h. This file is the JNI surface only.
@@ -95,4 +96,14 @@ JNIEXPORT jint JNICALL
 Java_com_macglcompat_natives_NativeBridge_bridgeLiveCount(JNIEnv* env, jclass clazz) {
     (void)env; (void)clazz;
     return (jint)macgl_bridge_live_count();
+}
+
+JNIEXPORT void JNICALL
+Java_com_macglcompat_natives_NativeBridge_setRealFunction(JNIEnv* env, jclass clazz,
+                                                          jstring name, jlong addr) {
+    (void)clazz;
+    if (name == NULL) return;
+    const char* c = (*env)->GetStringUTFChars(env, name, NULL);
+    macgl_set_real_function(c, (void*)(uintptr_t)addr);
+    (*env)->ReleaseStringUTFChars(env, name, c);
 }

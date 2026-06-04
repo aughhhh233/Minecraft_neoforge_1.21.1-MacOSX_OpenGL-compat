@@ -64,4 +64,11 @@ public final class NativeBridge {
 
     /** Number of live bridges (diagnostics/tests). */
     public static native int bridgeLiveCount();
+
+    /**
+     * Hand the backend the REAL driver address of a GL function our trampolines must
+     * delegate to (e.g. {@code glGetString} for non-version queries). Captured from
+     * LWJGL's original provider before the swap.
+     */
+    public static native void setRealFunction(String glFunctionName, long realAddress);
 }

@@ -66,6 +66,13 @@ public final class CompatInstaller {
                 return;
             }
 
+            // Our glGetString trampoline delegates non-version queries to the real one,
+            // so hand the backend the real address before we take over.
+            long realGetString = real.getFunctionAddress("glGetString");
+            if (realGetString != 0L) {
+                NativeBridge.setRealFunction("glGetString", realGetString);
+            }
+
             provider = new InterceptingFunctionProvider(real);
             boolean swapped = swapProviderField(provider);
             MacGLCompatAPI.markActive(swapped);

@@ -31,9 +31,4 @@ bool macgl_initialize(void) {
     return true;
 }
 
-void* macgl_function_address(const char* gl_name) {
-    // Phase 0/1: no GL entry points implemented yet. Phase 2 wires glDispatchCompute,
-    // SSBO binding, and the glGetString version override through here.
-    (void)gl_name;
-    return NULL;
-}
+// macgl_function_address / macgl_set_real_function live in trampolines.c.
