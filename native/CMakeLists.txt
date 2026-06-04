@@ -99,7 +99,8 @@ add_executable(headless_iosurface_test
 target_include_directories(headless_iosurface_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(headless_iosurface_test PRIVATE
-    "-framework Foundation" "-framework Metal" "-framework IOSurface")
+    "-framework Foundation" "-framework Metal" "-framework IOSurface"
+    "-framework OpenGL")  # iosurface.m now uses CGL (Phase 1b bind)
 
 # Phase 2 building block — compile MSL -> pipeline -> dispatch (needs a device; skips).
 add_executable(headless_compute_pipeline_test
