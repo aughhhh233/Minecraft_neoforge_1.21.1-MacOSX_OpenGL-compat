@@ -1,0 +1,121 @@
+name: build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Java side: does the NeoForge mod compile? (no Mac needed)
+  # ---------------------------------------------------------------------------
+  java-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10'
+
+      - name: Compile + assemble jar
+        run: gradle --no-daemon build
+
+      - name: Upload mod jar (no native yet)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-jar-java-only
+          path: build/libs/*.jar
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 2. Native side: build the dylib on Apple Silicon AND run the headless Metal
+  #    compute self-test. This is the Phase 0 proof that the Metal path works
+  #    in CI without a physical Mac.
+  # ---------------------------------------------------------------------------
+  native-build:
+    # macos-14 runners are Apple Silicon (M1).
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21 (for JNI headers)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Configure (CMake)
+        run: cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build dylib + test
+        run: cmake --build native/build --config Release -j3
+
+      - name: Run headless Metal compute self-test
+        id: metaltest
+        run: |
+          set +e
+          ./native/build/headless_compute_test
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 2 ]; then
+            echo "::warning::No Metal device on this runner — compute correctness was not verified here."
+            exit 0
+          fi
+          exit $code
+
+      - name: Upload dylib
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-dylib
+          path: native/build/libmacglcompat.dylib
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # 3. Package: drop the dylib into resources and rebuild the final mod jar.
+  # ---------------------------------------------------------------------------
+  package:
+    needs: [ java-build, native-build ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10'
+
+      - name: Fetch dylib
+        uses: actions/download-artifact@v4
+        with:
+          name: native-dylib
+          path: dylib-in
+
+      - name: Place dylib into resources
+        run: |
+          mkdir -p src/main/resources/natives/macos/aarch64
+          cp dylib-in/libmacglcompat.dylib src/main/resources/natives/macos/aarch64/
+
+      - name: Rebuild jar with native bundled
+        run: gradle --no-daemon build
+
+      - name: Upload final mod jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: macglcompat-mod
+          path: build/libs/*.jar
+          if-no-files-found: error

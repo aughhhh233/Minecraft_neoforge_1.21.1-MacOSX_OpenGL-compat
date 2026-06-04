@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ModDevGradle / NeoForge
+run/
+runs/
+.neoforge/
+
+# Native (CMake)
+native/build/
+*.o
+*.dylib
+# ...but DO allow a dylib that CI stages into resources during packaging:
+!src/main/resources/natives/**/*.dylib
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# OS
+Thumbs.db

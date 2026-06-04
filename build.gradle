@@ -1,0 +1,68 @@
+plugins {
+    id 'java'
+    // ModDevGradle: pulls NeoForge, decompiled Minecraft, and run configs.
+    // If CI reports this version is gone, bump it — it changes often.
+    id 'net.neoforged.moddev' version '2.0.78'
+}
+
+version = "${mod_version}"
+group = "${mod_group_id}"
+
+base {
+    archivesName = "${mod_id}-${minecraft_version}"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    // We compile but do not ship class files that touch macOS-only APIs;
+    // all platform branching is runtime via PlatformDetection.
+    withSourcesJar()
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = "${neo_version}"
+
+    // Mojang official mappings (matches NeoForge default for 1.21.1)
+    runs {
+        client {
+            client()
+            // Force the native ARM64 LWJGL path when a dev runs this on a real Mac.
+            jvmArguments.addAll('-Dmacglcompat.debug=true')
+        }
+    }
+
+    mods {
+        "${mod_id}" {
+            sourceSet sourceSets.main
+        }
+    }
+}
+
+dependencies {
+    // LWJGL's OpenGL + system modules are provided transitively by NeoForge/Minecraft.
+    // We only need them at compile time to reference GL.setFunctionProvider etc.
+    // ModDevGradle puts them on the compile classpath automatically via the MC dependency,
+    // so no explicit LWJGL dependency is required here.
+}
+
+/*
+ * The macOS Metal backend (libmacglcompat.dylib) is built separately by the
+ * `native` CMake project on a macOS CI runner. CI drops the compiled dylib into
+ * src/main/resources/natives/macos/ before the jar task runs, so it gets packaged
+ * into the mod jar under natives/macos/aarch64/libmacglcompat.dylib (same layout
+ * convention Sable uses). When building Java-only locally (no dylib present), the
+ * mod still compiles and loads — it just no-ops on startup because the native
+ * library is absent (see NativeLibraryLoader).
+ */
+processResources {
+    // Keep the natives folder if CI has populated it; don't fail when it's empty.
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.named('compileJava') {
+    options.encoding = 'UTF-8'
+}
