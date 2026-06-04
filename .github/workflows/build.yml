@@ -87,8 +87,8 @@ jobs:
           fi
           exit $code
 
-      - name: Run transpiler smoke test (glslang + SPIRV-Cross, CPU — must pass)
-        run: ./native/build/transpiler_smoke
+      - name: Run transpiler tests (GLSL->SPIR-V->MSL, CPU — must pass)
+        run: ./native/build/transpiler_test
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4

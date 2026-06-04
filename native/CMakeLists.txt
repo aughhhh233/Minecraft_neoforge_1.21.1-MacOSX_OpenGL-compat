@@ -96,9 +96,13 @@ target_include_directories(headless_iosurface_test PRIVATE
 target_link_libraries(headless_iosurface_test PRIVATE
     "-framework Foundation" "-framework Metal" "-framework IOSurface")
 
-# Transpiler smoke — pure CPU, ACTUALLY RUNS on CI and proves glslang + SPIRV-Cross
-# build and link. The real GLSL->MSL translation + tests come in A2/A3.
-add_executable(transpiler_smoke test/transpiler_smoke.cpp)
-target_link_libraries(transpiler_smoke PRIVATE
-    glslang SPIRV
+# Transpiler (A2) + its unit tests (A3) — pure CPU, ACTUALLY RUN on CI. Translates
+# GLSL compute -> SPIR-V -> MSL and asserts the output. No GPU needed.
+add_executable(transpiler_test
+    test/transpiler_test.cpp
+    src/transpiler.cpp)
+target_include_directories(transpiler_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(transpiler_test PRIVATE
+    glslang SPIRV glslang-default-resource-limits
     spirv-cross-msl spirv-cross-glsl spirv-cross-core)
