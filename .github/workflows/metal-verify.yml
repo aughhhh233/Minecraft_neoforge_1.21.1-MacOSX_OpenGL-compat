@@ -1,0 +1,52 @@
+# Real-Metal verification on a self-hosted bare-metal Mac runner.
+#
+# Dormant until you have a self-hosted runner online (e.g. a rented EC2 mac2.metal
+# registered with the labels [self-hosted, macOS, metal]). Trigger it manually from the
+# Actions tab. Unlike the virtualized GitHub runners, a bare-metal Mac HAS a Metal device,
+# so every headless test actually runs instead of skipping.
+#
+# Setup on the EC2 Mac (one time):
+#   1. AWS console: launch a mac2.metal Dedicated Host + instance (macOS AMI).
+#   2. SSH in. Install tools: brew install cmake openjdk@21
+#   3. Repo Settings > Actions > Runners > New self-hosted runner (macOS/ARM64).
+#      Follow the shown ./config.sh ... command, add label 'metal' when asked, ./run.sh
+#   4. Run this workflow (Actions tab > metal-verify > Run workflow).
+
+name: metal-verify
+
+on:
+  workflow_dispatch:
+
+jobs:
+  metal:
+    runs-on: [self-hosted, macOS, metal]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tools
+        run: |
+          command -v cmake >/dev/null || brew install cmake
+          echo "JAVA_HOME=$(brew --prefix)/opt/openjdk@21" >> "$GITHUB_ENV"
+
+      - name: Build native
+        run: |
+          cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build native/build -j"$(sysctl -n hw.ncpu)"
+
+      - name: Metal device present?
+        run: |
+          # All GPU tests below exit 2 if no device; on bare metal that must NOT happen.
+          ./native/build/headless_compute_test
+          test $? -ne 2 || { echo "::error::No Metal device on a bare-metal Mac — setup wrong."; exit 1; }
+
+      - name: CPU tests
+        run: |
+          ./native/build/transpiler_test
+          ./native/build/trampoline_test
+
+      - name: GPU tests (must pass on real hardware)
+        run: |
+          ./native/build/headless_compute_test
+          ./native/build/headless_iosurface_test
+          ./native/build/headless_compute_pipeline_test
+          ./native/build/headless_e2e_test
