@@ -90,6 +90,28 @@ jobs:
       - name: Run trampoline tests (resolution + glGetString spoof, CPU — must pass)
         run: ./native/build/trampoline_test
 
+      - name: Run compute pipeline test (MSL->pipeline->dispatch; needs GPU)
+        run: |
+          set +e
+          ./native/build/headless_compute_pipeline_test
+          code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "::warning::No Metal device — compute pipeline not verified here."
+            exit 0
+          fi
+          exit $code
+
+      - name: Run end-to-end test (GLSL->MSL->Metal dispatch; needs GPU)
+        run: |
+          set +e
+          ./native/build/headless_e2e_test
+          code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "::warning::No Metal device — end-to-end Phase 2 path not verified here."
+            exit 0
+          fi
+          exit $code
+
       - name: Run transpiler tests (GLSL->SPIR-V->MSL, CPU — must pass)
         run: ./native/build/transpiler_test
 

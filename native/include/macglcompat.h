@@ -52,6 +52,14 @@ uint32_t macgl_bridge_iosurface_id(MacGLBridgeHandle h);
 uint32_t macgl_bridge_width(MacGLBridgeHandle h);
 uint32_t macgl_bridge_height(MacGLBridgeHandle h);
 
+// Phase 1b: bind this bridge's IOSurface to the currently-bound GL texture of glTarget,
+// via CGLTexImageIOSurface2D, so Apple's GL driver and our MTLTexture share one surface.
+// MUST be called with a GL context current (in-game, on a Mac). Returns true on success.
+// Blind-written; needs a live GL context to verify (not exercisable in CI).
+bool macgl_bridge_bind_gl_texture(MacGLBridgeHandle h, uint32_t glTarget,
+                                  uint32_t glInternalFormat, uint32_t glFormat,
+                                  uint32_t glType);
+
 // Release the texture + surface and free the slot. No-op for an invalid handle.
 void macgl_bridge_destroy(MacGLBridgeHandle h);
 

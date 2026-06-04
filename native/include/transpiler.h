@@ -14,6 +14,7 @@ namespace macgl {
 struct TranspileResult {
     bool ok = false;
     std::string msl;   // Metal Shading Language source (when ok)
+    std::string entry; // MSL kernel entry name (SPIRV-Cross renames main->main0)
     std::string log;   // compiler/linker diagnostics (esp. when !ok)
     std::vector<uint32_t> spirv; // intermediate, for inspection/validation in tests
 };

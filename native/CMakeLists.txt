@@ -66,6 +66,7 @@ add_library(macglcompat SHARED
     src/compute.m
     src/iosurface.m
     src/trampolines.c
+    src/transpiler.cpp
 )
 target_include_directories(macglcompat PRIVATE
     ${JNI_INCLUDE_DIRS}
@@ -76,6 +77,9 @@ target_link_libraries(macglcompat PRIVATE
     "-framework Metal"
     "-framework IOSurface"
     "-framework CoreVideo"
+    "-framework OpenGL"          # deprecated, for the Phase 1b CGL IOSurface bind
+    glslang SPIRV glslang-default-resource-limits
+    spirv-cross-msl spirv-cross-glsl spirv-cross-core
 )
 set_target_properties(macglcompat PROPERTIES
     PREFIX "lib" OUTPUT_NAME "macglcompat" SUFFIX ".dylib")
@@ -96,6 +100,25 @@ target_include_directories(headless_iosurface_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(headless_iosurface_test PRIVATE
     "-framework Foundation" "-framework Metal" "-framework IOSurface")
+
+# Phase 2 building block — compile MSL -> pipeline -> dispatch (needs a device; skips).
+add_executable(headless_compute_pipeline_test
+    test/headless_compute_pipeline_test.m src/core.m src/compute.m)
+target_include_directories(headless_compute_pipeline_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(headless_compute_pipeline_test PRIVATE
+    "-framework Foundation" "-framework Metal")
+
+# End-to-end — GLSL -> MSL -> Metal pipeline -> dispatch (needs a device; skips).
+# THE test a GPU-capable CI / Mac must pass to prove Phase 2.
+add_executable(headless_e2e_test
+    test/headless_e2e_test.mm src/core.m src/compute.m src/transpiler.cpp)
+target_include_directories(headless_e2e_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(headless_e2e_test PRIVATE
+    "-framework Foundation" "-framework Metal"
+    glslang SPIRV glslang-default-resource-limits
+    spirv-cross-msl spirv-cross-glsl spirv-cross-core)
 
 # Trampoline resolution + glGetString version spoof (B) — pure C, runs on CI.
 add_executable(trampoline_test test/trampoline_test.c src/trampolines.c)

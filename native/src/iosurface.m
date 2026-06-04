@@ -9,6 +9,12 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #import <IOSurface/IOSurface.h>
+// OpenGL is deprecated on macOS but still present; needed for the CGL IOSurface bind.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#import <OpenGL/OpenGL.h>
+#import <OpenGL/CGLIOSurface.h>
+#import <OpenGL/gl.h>
 #include "macglcompat.h"
 
 // One live bridge: an IOSurface and the MTLTexture aliasing it.
@@ -161,3 +167,28 @@ uint32_t macgl_bridge_live_count(void) {
     [g_lock unlock];
     return n;
 }
+
+bool macgl_bridge_bind_gl_texture(MacGLBridgeHandle h, uint32_t glTarget,
+                                  uint32_t glInternalFormat, uint32_t glFormat,
+                                  uint32_t glType) {
+    MGLBridgeEntry* e = lookup(h);
+    if (!e || e.surface == NULL) return false;
+    CGLContextObj cgl = CGLGetCurrentContext();
+    if (cgl == NULL) {
+        NSLog(@"[MacGLCompat] bind_gl_texture: no current CGL context.");
+        return false;
+    }
+    // Binds the IOSurface as storage for the currently-bound texture of glTarget.
+    // Historically glTarget must be GL_TEXTURE_RECTANGLE for IOSurface textures; whether
+    // GL_TEXTURE_2D works for Minecraft's textures is the open question to settle on Mac.
+    CGLError err = CGLTexImageIOSurface2D(cgl, (GLenum)glTarget, (GLenum)glInternalFormat,
+                                          (GLsizei)e.width, (GLsizei)e.height,
+                                          (GLenum)glFormat, (GLenum)glType, e.surface, 0);
+    if (err != kCGLNoError) {
+        NSLog(@"[MacGLCompat] CGLTexImageIOSurface2D failed: %d", (int)err);
+        return false;
+    }
+    return true;
+}
+
+#pragma clang diagnostic pop

@@ -80,7 +80,15 @@ TranspileResult transpile_compute(const std::string& glslSource,
 
         r.msl = msl.compile();
         r.ok = !r.msl.empty();
-        if (!r.ok) r.log = "SPIRV-Cross produced empty MSL.";
+        if (!r.ok) {
+            r.log = "SPIRV-Cross produced empty MSL.";
+        } else {
+            // Capture the (possibly renamed) MSL entry point name, e.g. "main0".
+            auto eps = msl.get_entry_points_and_stages();
+            if (!eps.empty()) {
+                r.entry = msl.get_cleansed_entry_point_name(eps[0].name, eps[0].execution_model);
+            }
+        }
     } catch (const std::exception& e) {
         r.ok = false;
         r.log = std::string("SPIRV-Cross failed: ") + e.what();
