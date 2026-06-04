@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(macglcompat LANGUAGES C OBJC)
 
-# Apple Silicon only. (Phase 0 also builds fine as a universal slice if needed.)
 if(NOT DEFINED CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Target architectures" FORCE)
 endif()
@@ -12,10 +11,12 @@ set(CMAKE_OBJC_STANDARD_REQUIRED ON)
 # JNI headers (jni.h + jni_md.h). Provided by the JDK that setup-java installs.
 find_package(JNI REQUIRED)
 
+# --- The mod's native backend (loaded by the JVM) -------------------------
 add_library(macglcompat SHARED
-    src/bridge.m
-    src/compute.m
-    src/iosurface.m
+    src/core.m        # device bring-up + function resolution (no JNI)
+    src/bridge.m      # JNI surface only
+    src/compute.m     # Phase 2 (empty)
+    src/iosurface.m   # Phase 1a: IOSurface <-> MTLTexture bridge
 )
 
 target_include_directories(macglcompat PRIVATE
@@ -36,12 +37,27 @@ set_target_properties(macglcompat PROPERTIES
     SUFFIX ".dylib"
 )
 
-# --- Headless verification executable -------------------------------------
-# Proves the runner has a usable Metal device and that a real compute dispatch
-# + buffer readback produces correct results. This is the Phase 0 "green light"
-# for the Metal path — it needs no Minecraft and no human.
+# --- Headless verification executables (no Minecraft, no human) ------------
+
+# Proves Metal compute works on this host.
 add_executable(headless_compute_test test/headless_compute_test.m)
 target_link_libraries(headless_compute_test PRIVATE
     "-framework Foundation"
     "-framework Metal"
+)
+
+# Proves the IOSurface<->MTLTexture bridge shares GPU memory. Links the non-JNI
+# core + the bridge implementation directly (no jni.h needed).
+add_executable(headless_iosurface_test
+    test/headless_iosurface_test.m
+    src/core.m
+    src/iosurface.m
+)
+target_include_directories(headless_iosurface_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_link_libraries(headless_iosurface_test PRIVATE
+    "-framework Foundation"
+    "-framework Metal"
+    "-framework IOSurface"
 )

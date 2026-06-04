@@ -39,4 +39,29 @@ public final class NativeBridge {
 
     /** Human-readable backend description (Metal device name, feature set), for logs. */
     public static native String backendInfo();
+
+    // ---- Phase 1a: IOSurface <-> MTLTexture bridge ----
+
+    /** Format codes — must match MacGLFormat in native/include/macglcompat.h. */
+    public static final int FMT_RGBA8 = 0;
+    public static final int FMT_RGBA16F = 1;
+    public static final int FMT_R32F = 2;
+
+    /** Create an IOSurface-backed MTLTexture. Returns a handle, or 0 on failure. */
+    public static native long bridgeCreate(int width, int height, int fmt);
+
+    /** Raw id&lt;MTLTexture&gt; pointer for the handle (for Phase 2 compute), or 0. */
+    public static native long bridgeMtlTextureHandle(long handle);
+
+    /** IOSurfaceGetID of the backing surface — used by the Phase 1b GL bind. 0 if invalid. */
+    public static native int bridgeIOSurfaceId(long handle);
+
+    public static native int bridgeWidth(long handle);
+    public static native int bridgeHeight(long handle);
+
+    /** Release the texture + surface for this handle. No-op if invalid. */
+    public static native void bridgeDestroy(long handle);
+
+    /** Number of live bridges (diagnostics/tests). */
+    public static native int bridgeLiveCount();
 }

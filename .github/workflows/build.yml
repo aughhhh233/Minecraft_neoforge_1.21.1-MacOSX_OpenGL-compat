@@ -60,14 +60,23 @@ jobs:
         run: cmake --build native/build --config Release -j3
 
       - name: Run headless Metal compute self-test
-        id: metaltest
         run: |
           set +e
           ./native/build/headless_compute_test
           code=$?
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           if [ "$code" -eq 2 ]; then
             echo "::warning::No Metal device on this runner — compute correctness was not verified here."
+            exit 0
+          fi
+          exit $code
+
+      - name: Run headless IOSurface bridge self-test
+        run: |
+          set +e
+          ./native/build/headless_iosurface_test
+          code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "::warning::No Metal device on this runner — IOSurface bridge not verified here."
             exit 0
           fi
           exit $code

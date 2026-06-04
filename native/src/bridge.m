@@ -7,41 +7,12 @@
 #import <Foundation/Foundation.h>
 #import <Metal/Metal.h>
 #include <jni.h>
+#include <stdint.h>
 #include <string.h>
 #include "macglcompat.h"
 
-static MacGLContext g_ctx = { nil, nil, false };
-
-MacGLContext* macgl_context(void) {
-    return &g_ctx;
-}
-
-bool macgl_initialize(void) {
-    if (g_ctx.ready) return true;
-
-    id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
-    if (dev == nil) {
-        NSLog(@"[MacGLCompat] No Metal device available.");
-        return false;
-    }
-    id<MTLCommandQueue> q = [dev newCommandQueue];
-    if (q == nil) {
-        NSLog(@"[MacGLCompat] Failed to create command queue.");
-        return false;
-    }
-    g_ctx.device = dev;
-    g_ctx.queue  = q;
-    g_ctx.ready  = true;
-    NSLog(@"[MacGLCompat] Metal device: %@", [dev name]);
-    return true;
-}
-
-void* macgl_function_address(const char* gl_name) {
-    // Phase 0: nothing implemented yet. Phase 1 wires glDispatchCompute, SSBO
-    // binding, and the glGetString version override through here.
-    (void)gl_name;
-    return NULL;
-}
+// Device/queue bring-up + function resolution live in core.m so test executables
+// can link them without jni.h. This file is the JNI surface only.
 
 // ---- JNI exports (must match com.macglcompat.natives.NativeBridge) ----
 
@@ -71,11 +42,57 @@ Java_com_macglcompat_natives_NativeBridge_spoofedVersionString(JNIEnv* env, jcla
 JNIEXPORT jstring JNICALL
 Java_com_macglcompat_natives_NativeBridge_backendInfo(JNIEnv* env, jclass clazz) {
     (void)clazz;
-    if (!g_ctx.ready || g_ctx.device == nil) {
+    MacGLContext* ctx = macgl_context();
+    if (ctx == NULL || !ctx->ready || ctx->device == nil) {
         return (*env)->NewStringUTF(env, "uninitialized");
     }
-    const char* dn = [[g_ctx.device name] UTF8String];
+    const char* dn = [[ctx->device name] UTF8String];
     char buf[256];
     snprintf(buf, sizeof(buf), "Metal device='%s'", dn ? dn : "unknown");
     return (*env)->NewStringUTF(env, buf);
+}
+
+// ---- Phase 1a: IOSurface <-> MTLTexture bridge (JNI) ----
+
+JNIEXPORT jlong JNICALL
+Java_com_macglcompat_natives_NativeBridge_bridgeCreate(JNIEnv* env, jclass clazz,
+                                                       jint width, jint height, jint fmt) {
+    (void)env; (void)clazz;
+    return (jlong)macgl_bridge_create((uint32_t)width, (uint32_t)height, (MacGLFormat)fmt);
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_macglcompat_natives_NativeBridge_bridgeMtlTextureHandle(JNIEnv* env, jclass clazz, jlong h) {
+    (void)env; (void)clazz;
+    return (jlong)(uintptr_t)macgl_bridge_mtltexture((MacGLBridgeHandle)h);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_macglcompat_natives_NativeBridge_bridgeIOSurfaceId(JNIEnv* env, jclass clazz, jlong h) {
+    (void)env; (void)clazz;
+    return (jint)macgl_bridge_iosurface_id((MacGLBridgeHandle)h);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_macglcompat_natives_NativeBridge_bridgeWidth(JNIEnv* env, jclass clazz, jlong h) {
+    (void)env; (void)clazz;
+    return (jint)macgl_bridge_width((MacGLBridgeHandle)h);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_macglcompat_natives_NativeBridge_bridgeHeight(JNIEnv* env, jclass clazz, jlong h) {
+    (void)env; (void)clazz;
+    return (jint)macgl_bridge_height((MacGLBridgeHandle)h);
+}
+
+JNIEXPORT void JNICALL
+Java_com_macglcompat_natives_NativeBridge_bridgeDestroy(JNIEnv* env, jclass clazz, jlong h) {
+    (void)env; (void)clazz;
+    macgl_bridge_destroy((MacGLBridgeHandle)h);
+}
+
+JNIEXPORT jint JNICALL
+Java_com_macglcompat_natives_NativeBridge_bridgeLiveCount(JNIEnv* env, jclass clazz) {
+    (void)env; (void)clazz;
+    return (jint)macgl_bridge_live_count();
 }

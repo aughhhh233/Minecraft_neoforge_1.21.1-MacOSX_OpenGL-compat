@@ -14,10 +14,15 @@ Test shaderpack baseline: **Solas Shader** (compute-heavy) — config-tunable.
   reads back correct results on the CI runner.
 
 ## Phase 1 — IOSurface resource bridge
-- `OpenGL texture ↔ IOSurface ↔ MTLTexture` mapping table + cross-queue sync.
-- Move the provider swap into a window-init mixin if mod-constructor timing proves too
-  late (to be confirmed on a real Mac).
-- First step that needs Apple-Silicon validation beyond the headless CI test.
+**1a (done, CI-compiled):** Metal half — `IOSurface ↔ MTLTexture` mapping table
+(`native/src/iosurface.m`, `core/TextureBridge.java`). Headless test verifies the
+surface and texture share GPU memory (skips without a device). No GL context needed.
+
+**1b (deferred, needs a real Mac):** GL half — bind the same IOSurface to an OpenGL
+texture via `CGLTexImageIOSurface2D`. Requires a live GL context (in-game only), so it
+is untestable in CI and risky to write blind; left until hardware is in the loop.
+Also: relocate the provider swap into a window-init mixin if mod-constructor timing is
+too late.
 
 ## Phase 2 — Iris compute shaders + SSBO  *(primary goal)*
 - Integrate **glslang** + **SPIRV-Cross**: runtime GLSL → SPIR-V → MSL → `MTLLibrary`.
