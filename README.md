@@ -1,4 +1,6 @@
-# MacGLCompat
+# Minecraft_neoforge_1.21.1-MacOSX_OpenGL-compat
+
+*(internal mod id: `macglcompat`)*
 
 A macOS **OpenGL 4.1 → Metal** compatibility shim for **NeoForge 1.21.1**.
 
