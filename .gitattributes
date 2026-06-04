@@ -1,0 +1,7 @@
+# Normalize all text to LF so files built on the macOS/Linux CI runners are clean.
+* text=auto eol=lf
+
+# Binary artifacts that must never be munged.
+*.dylib binary
+*.jar binary
+*.png binary
