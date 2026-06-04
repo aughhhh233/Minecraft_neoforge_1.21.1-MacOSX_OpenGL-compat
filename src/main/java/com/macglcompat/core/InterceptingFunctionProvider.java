@@ -6,6 +6,7 @@ import org.lwjgl.system.FunctionProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
 import java.util.Set;
 
 /**
@@ -21,13 +22,18 @@ import java.util.Set;
  *
  * <h2>Resolution order</h2>
  * <ol>
- *   <li><b>Override set</b> — functions we always replace even though 4.1 has them.
- *       Currently just version queries, so LWJGL believes it is talking to a 4.6 driver
- *       and therefore attempts to load the 4.3/4.6 function sets at all.</li>
+ *   <li><b>Override set</b> — functions we always replace even though 4.1 has them
+ *       (version queries, so LWJGL believes it is talking to a 4.6 driver and therefore
+ *       attempts to bind the 4.3/4.6 function sets at all).</li>
  *   <li><b>Real driver</b> — Apple's OpenGL 4.1, for everything it genuinely provides.</li>
  *   <li><b>Our Metal backend</b> — for 4.2+ entry points the driver returned 0 for.</li>
  *   <li><b>Addon handlers</b> — last, so addons extend but never shadow the OS.</li>
  * </ol>
+ *
+ * <p>LWJGL's {@link FunctionProvider} abstract method takes a NUL-terminated ASCII
+ * {@link ByteBuffer}; the {@code CharSequence} overload is a default that funnels into
+ * it. We implement the ByteBuffer one and decode names in pure Java (function names are
+ * ASCII) to avoid depending on LWJGL MemoryUtil internals.
  */
 public final class InterceptingFunctionProvider implements FunctionProvider {
 
@@ -51,14 +57,15 @@ public final class InterceptingFunctionProvider implements FunctionProvider {
     }
 
     @Override
-    public long getFunctionAddress(CharSequence functionName) {
-        String name = functionName.toString();
+    public long getFunctionAddress(ByteBuffer functionName) {
+        // Resolve our own logic by name, but hand the ORIGINAL buffer to the delegate
+        // so its lookup sees exactly what LWJGL passed.
+        String name = decodeAscii(functionName);
 
         // (1) Unconditional overrides — version spoofing lives here.
         if (OVERRIDE.contains(name)) {
             long a = NativeBridge.functionAddress(name);
             if (a != 0L) return a;
-            // If the backend doesn't override it after all, fall through to the driver.
         }
 
         // (2) The real Apple OpenGL 4.1 driver.
@@ -82,5 +89,18 @@ public final class InterceptingFunctionProvider implements FunctionProvider {
         // Genuinely unavailable. Returning 0 leaves the capability flag false, same as
         // stock behaviour — callers that feature-detect will simply skip it.
         return 0L;
+    }
+
+    /** Decode a NUL-terminated ASCII function name without touching LWJGL internals. */
+    private static String decodeAscii(ByteBuffer bb) {
+        int start = bb.position();
+        int end = bb.limit();
+        StringBuilder sb = new StringBuilder(end - start);
+        for (int i = start; i < end; i++) {
+            byte b = bb.get(i);
+            if (b == 0) break; // NUL terminator
+            sb.append((char) (b & 0xFF));
+        }
+        return sb.toString();
     }
 }

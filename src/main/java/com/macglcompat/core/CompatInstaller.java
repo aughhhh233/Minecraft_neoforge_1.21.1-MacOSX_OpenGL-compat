@@ -11,20 +11,30 @@ import org.slf4j.LoggerFactory;
 /**
  * Wires the interception layer into LWJGL.
  *
- * <p><b>Timing.</b> The function-provider swap must happen <i>before</i> Minecraft
- * calls {@code GL.createCapabilities()} in {@code com.mojang.blaze3d.platform.Window},
- * otherwise LWJGL has already decided which function sets exist. In Phase 0 we install
- * from the mod constructor, which on NeoForge runs during client bootstrap; whether
- * that reliably precedes capability creation has to be confirmed on a real Mac in
- * Phase 1, and if not, this call moves into a Mixin at the head of the capability-
- * creation method. The Java contract here does not change either way.
+ * <p><b>Phase 0 status.</b> This builds the wrapping {@link InterceptingFunctionProvider}
+ * around LWJGL's real provider and proves the backend is alive, but does NOT yet swap it
+ * into LWJGL. LWJGL's {@code GL} class exposes {@link GL#getFunctionProvider()} but no
+ * public setter, so the actual swap has to go through {@code GL.create(...)} /
+ * {@code GLCapabilities} reconstruction, whose correct sequencing must be validated on a
+ * real Apple-Silicon Mac (Phase 1). Baking in a guessed mechanism here would be wrong.
+ *
+ * <p><b>Timing.</b> The swap must land before Minecraft calls {@code GL.createCapabilities()}
+ * in {@code com.mojang.blaze3d.platform.Window}. Phase 1 decides between a window-init
+ * mixin and a provider rebuild, once observable on hardware.
  */
 public final class CompatInstaller {
 
     private static final Logger LOG = LoggerFactory.getLogger("MacGLCompat");
     private static boolean installed = false;
 
+    /** The wrapper, retained for Phase 1 to install into LWJGL. */
+    private static volatile InterceptingFunctionProvider provider;
+
     private CompatInstaller() {}
+
+    public static InterceptingFunctionProvider provider() {
+        return provider;
+    }
 
     public static synchronized void install() {
         if (installed) return;
@@ -36,7 +46,7 @@ public final class CompatInstaller {
         }
 
         if (!NativeLibraryLoader.load()) {
-            LOG.warn("Native backend unavailable; MacGLCompat inactive (game will run on plain OpenGL 4.1).");
+            LOG.warn("Native backend unavailable; MacGLCompat inactive (game runs on plain OpenGL 4.1).");
             return;
         }
 
@@ -49,17 +59,15 @@ public final class CompatInstaller {
 
             FunctionProvider real = GL.getFunctionProvider();
             if (real == null) {
-                // GL not yet created — LWJGL will create the provider later; we install
-                // our wrapper once it exists. In practice GL.create() has run by mod
-                // construction time, but guard anyway.
-                LOG.warn("LWJGL GL function provider not yet available at install time; "
-                        + "Phase 1 will relocate the swap into a window-init mixin.");
+                LOG.warn("LWJGL GL provider not available yet at install time; "
+                        + "Phase 1 will hook window-init to capture it.");
                 return;
             }
 
-            GL.setFunctionProvider(new InterceptingFunctionProvider(real));
+            provider = new InterceptingFunctionProvider(real);
             MacGLCompatAPI.markActive(true);
-            LOG.info("Interception installed. Reporting GL_VERSION as '{}'.",
+            LOG.info("Interception provider built (will report GL_VERSION '{}'). "
+                    + "Phase 1: swap into LWJGL before createCapabilities.",
                     NativeBridge.spoofedVersionString());
         } catch (Throwable t) {
             // A failure here must never take down the game.
