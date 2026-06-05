@@ -8,6 +8,9 @@
 #include <spirv_msl.hpp>
 
 #include <mutex>
+#include <thread>
+#include <atomic>
+#include <algorithm>
 
 namespace macgl {
 
@@ -94,6 +97,43 @@ TranspileResult transpile_compute(const std::string& glslSource,
         r.log = std::string("SPIRV-Cross failed: ") + e.what();
     }
     return r;
+}
+
+std::vector<TranspileResult> transpile_compute_batch(
+        const std::vector<std::string>& glslSources,
+        int glslVersion, int mslMajor, int mslMinor) {
+    // Initialize glslang once, before any worker touches it.
+    ensure_glslang();
+
+    const size_t count = glslSources.size();
+    std::vector<TranspileResult> results(count);
+    if (count == 0) return results;
+
+    unsigned hw = std::thread::hardware_concurrency();
+    if (hw == 0) hw = 2;
+    const unsigned nThreads = static_cast<unsigned>(std::min<size_t>(hw, count));
+
+    if (nThreads <= 1) {
+        for (size_t i = 0; i < count; ++i)
+            results[i] = transpile_compute(glslSources[i], glslVersion, mslMajor, mslMinor);
+        return results;
+    }
+
+    // Work-stealing over a shared atomic index. Each worker owns its result slot, so
+    // there is no contended write; the only shared state is the counter.
+    std::atomic<size_t> next{0};
+    auto worker = [&]() {
+        size_t i;
+        while ((i = next.fetch_add(1, std::memory_order_relaxed)) < count) {
+            results[i] = transpile_compute(glslSources[i], glslVersion, mslMajor, mslMinor);
+        }
+    };
+
+    std::vector<std::thread> pool;
+    pool.reserve(nThreads);
+    for (unsigned t = 0; t < nThreads; ++t) pool.emplace_back(worker);
+    for (auto& th : pool) th.join();
+    return results;
 }
 
 } // namespace macgl

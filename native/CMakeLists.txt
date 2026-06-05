@@ -136,3 +136,13 @@ target_include_directories(transpiler_test PRIVATE
 target_link_libraries(transpiler_test PRIVATE
     glslang SPIRV glslang-default-resource-limits
     spirv-cross-msl spirv-cross-glsl spirv-cross-core)
+
+# Parallel batch transpilation — proves thread safety via determinism. Pure CPU.
+add_executable(transpiler_concurrency_test
+    test/transpiler_concurrency_test.cpp
+    src/transpiler.cpp)
+target_include_directories(transpiler_concurrency_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(transpiler_concurrency_test PRIVATE
+    glslang SPIRV glslang-default-resource-limits
+    spirv-cross-msl spirv-cross-glsl spirv-cross-core)

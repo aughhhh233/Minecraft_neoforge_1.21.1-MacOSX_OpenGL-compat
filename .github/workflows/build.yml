@@ -119,6 +119,9 @@ jobs:
       - name: Run transpiler tests (GLSL->SPIR-V->MSL, CPU — must pass)
         run: ./native/build/transpiler_test
 
+      - name: Run transpiler concurrency test (parallel batch, CPU — must pass)
+        run: ./native/build/transpiler_concurrency_test
+
       - name: Upload dylib
         uses: actions/upload-artifact@v4
         with:

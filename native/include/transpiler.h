@@ -27,6 +27,17 @@ TranspileResult transpile_compute(const std::string& glslSource,
                                   int mslMajor = 2,
                                   int mslMinor = 1);
 
+// Translate many compute shaders in parallel across a thread pool. A shaderpack load
+// hands us dozens-to-hundreds of shaders at once; doing them sequentially stalls
+// startup, so this fans them out over hardware threads. Each result lines up with its
+// input by index. glslang is initialized once up front (thread-safe), and every worker
+// uses its own TShader/CompilerMSL, so there is no shared mutable state.
+std::vector<TranspileResult> transpile_compute_batch(
+        const std::vector<std::string>& glslSources,
+        int glslVersion = 450,
+        int mslMajor = 2,
+        int mslMinor = 1);
+
 } // namespace macgl
 
 #endif // MACGLCOMPAT_TRANSPILER_H
