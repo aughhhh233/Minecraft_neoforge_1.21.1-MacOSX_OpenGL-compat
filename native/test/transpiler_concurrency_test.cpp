@@ -42,19 +42,20 @@ int main() {
     std::vector<std::string> sources;
     sources.reserve(N);
     for (int i = 0; i < N; ++i) {
-        switch (i % 3) {
-            case 0: sources.emplace_back(kSSBO);  break;
-            case 1: sources.emplace_back(kImage); break;
-            default: sources.emplace_back(kShared); break;
-        }
+        const char* base = (i % 3 == 0) ? kSSBO : (i % 3 == 1) ? kImage : kShared;
+        // Make every source unique (trailing comment) so the cache can't collapse them
+        // — this keeps the parallel run doing real, concurrent glslang translation.
+        sources.emplace_back(std::string(base) + "// variant " + std::to_string(i) + "\n");
     }
 
-    // Sequential baseline.
+    // Sequential baseline (also populates the cache).
     std::vector<macgl::TranspileResult> seq;
     seq.reserve(N);
     for (int i = 0; i < N; ++i) seq.push_back(macgl::transpile_compute(sources[i], 450));
 
-    // Parallel batch.
+    // Clear the cache so the parallel batch genuinely re-translates concurrently
+    // (otherwise it would just hit the cache the sequential pass filled).
+    macgl::transpile_clear_cache();
     std::vector<macgl::TranspileResult> par = macgl::transpile_compute_batch(sources, 450);
 
     if ((int)par.size() != N) {

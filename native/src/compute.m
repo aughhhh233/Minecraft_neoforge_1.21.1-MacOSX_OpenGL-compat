@@ -19,12 +19,24 @@ static NSMutableDictionary<NSNumber*, MGLPipeline*>* g_pipes = nil;
 static uint64_t g_next_pipe = 1;
 static NSLock* g_pipe_lock = nil;
 
+// Pipeline cache: identical (MSL + entry) compiles to the same pipeline, so building it
+// again should reuse the existing one instead of re-invoking the Metal shader compiler
+// (which is expensive). key string -> handle, plus handle -> key for cleanup on destroy.
+static NSMutableDictionary<NSString*, NSNumber*>* g_pipeCache = nil;
+static NSMutableDictionary<NSNumber*, NSString*>* g_pipeKeyByHandle = nil;
+
 static void ensure_pipe_tables(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         g_pipes = [NSMutableDictionary dictionary];
         g_pipe_lock = [[NSLock alloc] init];
+        g_pipeCache = [NSMutableDictionary dictionary];
+        g_pipeKeyByHandle = [NSMutableDictionary dictionary];
     });
+}
+
+static NSString* pipe_cache_key(const char* msl, const char* entry) {
+    return [NSString stringWithFormat:@"%s\x01%s", msl, entry];
 }
 
 uint64_t macgl_compute_build_pipeline(const char* mslSource, const char* entryName,
@@ -39,6 +51,17 @@ uint64_t macgl_compute_build_pipeline(const char* mslSource, const char* entryNa
         if (err && errCap > 0) snprintf(err, errCap, "null source/entry");
         return 0;
     }
+
+    // Cache hit: same MSL + entry already compiled and still live.
+    NSString* ckey = pipe_cache_key(mslSource, entryName);
+    [g_pipe_lock lock];
+    NSNumber* cached = g_pipeCache[ckey];
+    if (cached != nil && g_pipes[cached] != nil) {
+        uint64_t h = (uint64_t)[cached unsignedLongLongValue];
+        [g_pipe_lock unlock];
+        return h;
+    }
+    [g_pipe_lock unlock];
 
     NSError* nserr = nil;
     NSString* src = [NSString stringWithUTF8String:mslSource];
@@ -71,6 +94,8 @@ uint64_t macgl_compute_build_pipeline(const char* mslSource, const char* entryNa
     [g_pipe_lock lock];
     uint64_t h = g_next_pipe++;
     g_pipes[@(h)] = p;
+    g_pipeCache[ckey] = @(h);
+    g_pipeKeyByHandle[@(h)] = ckey;
     [g_pipe_lock unlock];
     return h;
 }
@@ -116,6 +141,11 @@ void macgl_compute_destroy_pipeline(uint64_t pipeline) {
     if (pipeline == 0 || g_pipes == nil) return;
     [g_pipe_lock lock];
     [g_pipes removeObjectForKey:@(pipeline)];
+    NSString* key = g_pipeKeyByHandle[@(pipeline)];
+    if (key != nil) {
+        [g_pipeCache removeObjectForKey:key];
+        [g_pipeKeyByHandle removeObjectForKey:@(pipeline)];
+    }
     [g_pipe_lock unlock];
 }
 

@@ -38,6 +38,15 @@ std::vector<TranspileResult> transpile_compute_batch(
         int mslMajor = 2,
         int mslMinor = 1);
 
+// --- transpile cache ------------------------------------------------------
+// Identical GLSL (same source + version + MSL target) recurs constantly: shaderpack
+// reloads, dimension changes, and duplicate programs within one pack. Caching the MSL
+// result skips the glslang + SPIRV-Cross work on a hit. Thread-safe.
+
+void   transpile_clear_cache();
+size_t transpile_cache_size(void);  // unique entries currently cached
+size_t transpile_cache_hits(void);  // cumulative cache hits (diagnostics/tests)
+
 } // namespace macgl
 
 #endif // MACGLCOMPAT_TRANSPILER_H

@@ -11,6 +11,8 @@
 #include <thread>
 #include <atomic>
 #include <algorithm>
+#include <unordered_map>
+#include <functional>
 
 namespace macgl {
 
@@ -20,12 +22,38 @@ std::once_flag g_initFlag;
 void ensure_glslang() {
     std::call_once(g_initFlag, [] { glslang::InitializeProcess(); });
 }
+
+// --- transpile cache state ---
+std::mutex g_cacheMutex;
+std::unordered_map<uint64_t, TranspileResult> g_cache;
+std::atomic<size_t> g_cacheHits{0};
+
+uint64_t cache_key(const std::string& src, int glslV, int mslMaj, int mslMin) {
+    uint64_t h = std::hash<std::string>{}(src);
+    auto mix = [&h](uint64_t v) { h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
+    mix(static_cast<uint64_t>(glslV));
+    mix(static_cast<uint64_t>(mslMaj));
+    mix(static_cast<uint64_t>(mslMin));
+    return h;
+}
 } // namespace
 
-TranspileResult transpile_compute(const std::string& glslSource,
-                                  int glslVersion,
-                                  int mslMajor,
-                                  int mslMinor) {
+void transpile_clear_cache() {
+    std::lock_guard<std::mutex> lk(g_cacheMutex);
+    g_cache.clear();
+    g_cacheHits.store(0);
+}
+size_t transpile_cache_size(void) {
+    std::lock_guard<std::mutex> lk(g_cacheMutex);
+    return g_cache.size();
+}
+size_t transpile_cache_hits(void) { return g_cacheHits.load(); }
+
+// The actual translation, no caching.
+static TranspileResult transpile_compute_impl(const std::string& glslSource,
+                                              int glslVersion,
+                                              int mslMajor,
+                                              int mslMinor) {
     TranspileResult r;
     ensure_glslang();
 
@@ -95,6 +123,27 @@ TranspileResult transpile_compute(const std::string& glslSource,
     } catch (const std::exception& e) {
         r.ok = false;
         r.log = std::string("SPIRV-Cross failed: ") + e.what();
+    }
+    return r;
+}
+
+TranspileResult transpile_compute(const std::string& glslSource,
+                                  int glslVersion, int mslMajor, int mslMinor) {
+    const uint64_t key = cache_key(glslSource, glslVersion, mslMajor, mslMinor);
+    {
+        std::lock_guard<std::mutex> lk(g_cacheMutex);
+        auto it = g_cache.find(key);
+        if (it != g_cache.end()) {
+            g_cacheHits.fetch_add(1, std::memory_order_relaxed);
+            return it->second; // copy of the cached result
+        }
+    }
+    // Compute outside the lock so concurrent distinct shaders translate in parallel.
+    TranspileResult r = transpile_compute_impl(glslSource, glslVersion, mslMajor, mslMinor);
+    // Only cache successes; a transient failure shouldn't be sticky.
+    if (r.ok) {
+        std::lock_guard<std::mutex> lk(g_cacheMutex);
+        g_cache.emplace(key, r);
     }
     return r;
 }

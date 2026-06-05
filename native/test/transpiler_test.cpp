@@ -105,6 +105,34 @@ int main() {
         check(!r.log.empty(), "failure log is populated");
     }
 
+    // --- Test 5: the transpile cache hits on identical input --------------
+    {
+        std::printf("[test] transpile cache\n");
+        macgl::transpile_clear_cache();
+        const std::string s =
+            "#version 450\n"
+            "layout(local_size_x = 32) in;\n"
+            "layout(std430, binding = 0) buffer B { int d[]; };\n"
+            "void main() { d[gl_GlobalInvocationID.x] += 7; }\n";
+
+        macgl::TranspileResult a = macgl::transpile_compute(s, 450);
+        check(a.ok, "first transpile ok");
+        check(macgl::transpile_cache_size() == 1, "cache holds 1 after first");
+        check(macgl::transpile_cache_hits() == 0, "no hits yet");
+
+        macgl::TranspileResult b = macgl::transpile_compute(s, 450);
+        check(b.ok && b.msl == a.msl, "second transpile identical");
+        check(macgl::transpile_cache_hits() == 1, "second transpile was a cache hit");
+        check(macgl::transpile_cache_size() == 1, "cache still holds 1");
+
+        // A different shader adds an entry; a failure is not cached.
+        macgl::transpile_compute(
+            "#version 450\nlayout(local_size_x=1) in;\nvoid main(){}\n", 450);
+        check(macgl::transpile_cache_size() == 2, "distinct shader adds an entry");
+        macgl::transpile_compute("#version 450\n@@@ not glsl\n", 450);
+        check(macgl::transpile_cache_size() == 2, "failed transpile is not cached");
+    }
+
     if (g_failures == 0) {
         std::printf("PASS: transpiler tests (%s)\n", "all");
         return 0;
