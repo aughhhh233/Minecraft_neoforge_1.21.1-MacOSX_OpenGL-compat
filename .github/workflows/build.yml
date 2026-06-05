@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Opt JS actions into Node.js 24 now (silences the Node 20 deprecation warning).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ---------------------------------------------------------------------------
   # 1. Java side: does the NeoForge mod compile? (no Mac needed)

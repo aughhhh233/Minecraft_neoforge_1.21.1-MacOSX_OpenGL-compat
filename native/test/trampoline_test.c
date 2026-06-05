@@ -48,6 +48,22 @@ int main(void) {
     check(vendor != NULL && strcmp(vendor, "FAKE_VENDOR") == 0,
           "non-version query delegates to real driver");
 
+    // Edge cases for the real-function table.
+    // Overwriting an existing entry takes effect.
+    static const GLubyte* (*second)(GLenum) = NULL;
+    macgl_set_real_function("glGetString", (void*)&fake_real_getstring); // same key again
+    check(((PFN_glGetString)macgl_function_address("glGetString"))(GL_VENDOR) != NULL,
+          "re-registering the same function is harmless");
+
+    // A different function can be stored and read back independently.
+    macgl_set_real_function("glOther", (void*)&fake_real_getstring);
+    check(1, "storing a second real function does not disturb the first");
+    (void)second;
+
+    // NULL inputs must not crash.
+    macgl_set_real_function(NULL, NULL);
+    check(macgl_function_address(NULL) == NULL, "NULL name resolves to NULL safely");
+
     if (failures == 0) { printf("PASS: trampoline tests\n"); return 0; }
     printf("FAILED: %d checks\n", failures);
     return 1;

@@ -46,7 +46,55 @@ int main() {
         }
     }
 
-    // --- Test 2: invalid GLSL fails cleanly (no crash, ok=false, log set) --
+    // --- Test 2: image load/store compute (what Iris actually uses, per D1) -
+    {
+        std::printf("[test] image load/store compute (Iris-style)\n");
+        const std::string glsl =
+            "#version 450\n"
+            "layout(local_size_x = 8, local_size_y = 8) in;\n"
+            "layout(rgba8, binding = 0) uniform image2D img;\n"
+            "void main() {\n"
+            "    ivec2 p = ivec2(gl_GlobalInvocationID.xy);\n"
+            "    vec4 c = imageLoad(img, p);\n"
+            "    imageStore(img, p, c + vec4(0.1));\n"
+            "}\n";
+        macgl::TranspileResult r = macgl::transpile_compute(glsl, 450);
+        if (!r.ok) {
+            std::printf("  FAIL: transpile not ok. log:\n%s\n", r.log.c_str());
+            ++g_failures;
+        } else {
+            check(contains(r.msl, "texture2d"), "MSL maps image2D to a texture2d");
+            check(contains(r.msl, "kernel"), "MSL has a kernel function");
+        }
+    }
+
+    // --- Test 3: shared memory + barrier compute --------------------------
+    {
+        std::printf("[test] shared memory + barrier compute\n");
+        const std::string glsl =
+            "#version 450\n"
+            "layout(local_size_x = 64) in;\n"
+            "shared int tmp[64];\n"
+            "layout(std430, binding = 0) buffer B { int data[]; };\n"
+            "void main() {\n"
+            "    uint l = gl_LocalInvocationID.x;\n"
+            "    uint g = gl_GlobalInvocationID.x;\n"
+            "    tmp[l] = data[g];\n"
+            "    barrier();\n"
+            "    data[g] = tmp[l] + 1;\n"
+            "}\n";
+        macgl::TranspileResult r = macgl::transpile_compute(glsl, 450);
+        if (!r.ok) {
+            std::printf("  FAIL: transpile not ok. log:\n%s\n", r.log.c_str());
+            ++g_failures;
+        } else {
+            check(contains(r.msl, "threadgroup"), "MSL emits threadgroup (shared) memory");
+            check(contains(r.msl, "barrier"), "MSL emits a barrier");
+            check(!r.entry.empty(), "entry name captured");
+        }
+    }
+
+    // --- Test 4: invalid GLSL fails cleanly (no crash, ok=false, log set) --
     {
         std::printf("[test] invalid GLSL fails gracefully\n");
         const std::string bad =
