@@ -133,6 +133,32 @@ int main() {
         check(macgl::transpile_cache_size() == 2, "failed transpile is not cached");
     }
 
+    // --- Test 5: transpile cache (hit avoids re-translation) --------------
+    {
+        std::printf("[test] transpile cache\n");
+        const std::string glsl =
+            "#version 450\n"
+            "layout(local_size_x = 32) in;\n"
+            "layout(std430, binding = 0) buffer C { int v[]; };\n"
+            "void main() { v[gl_GlobalInvocationID.x] *= 2; }\n";
+
+        macgl::transpile_clear_cache();
+        check(macgl::transpile_cache_size() == 0, "cache empty after clear");
+
+        macgl::TranspileResult a = macgl::transpile_compute(glsl, 450);
+        check(a.ok, "first transpile ok");
+        check(macgl::transpile_cache_size() == 1, "one entry cached after first call");
+        size_t hits0 = macgl::transpile_cache_hits();
+
+        macgl::TranspileResult b = macgl::transpile_compute(glsl, 450);
+        check(macgl::transpile_cache_hits() == hits0 + 1, "second identical call is a cache hit");
+        check(macgl::transpile_cache_size() == 1, "cache hit adds no new entry");
+        check(a.msl == b.msl, "cached MSL matches freshly translated MSL");
+
+        macgl::transpile_clear_cache();
+        check(macgl::transpile_cache_size() == 0, "clear empties the cache");
+    }
+
     if (g_failures == 0) {
         std::printf("PASS: transpiler tests (%s)\n", "all");
         return 0;

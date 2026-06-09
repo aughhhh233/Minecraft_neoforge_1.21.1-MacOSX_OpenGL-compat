@@ -23,6 +23,16 @@ int main(void) {
     uint64_t pipe = macgl_compute_build_pipeline(kMSL, "addOne", err, sizeof(err));
     if (pipe == 0) { fprintf(stderr, "FAIL: build_pipeline: %s\n", err); return 1; }
 
+    // Pipeline cache: rebuilding the same MSL+entry must reuse the same pipeline,
+    // not recompile (the Metal shader compiler is expensive).
+    uint64_t pipe2 = macgl_compute_build_pipeline(kMSL, "addOne", err, sizeof(err));
+    if (pipe2 != pipe) { fprintf(stderr, "FAIL: cache miss — got new handle %llu vs %llu\n",
+                                 (unsigned long long)pipe2, (unsigned long long)pipe); return 1; }
+    if (macgl_compute_live_pipelines() != 1) {
+        fprintf(stderr, "FAIL: expected 1 live pipeline after cached rebuild.\n"); return 1;
+    }
+    printf("ok: pipeline cache returns same handle on identical rebuild.\n");
+
     const int N = 256;
     int data[N];
     for (int i = 0; i < N; i++) data[i] = i;
