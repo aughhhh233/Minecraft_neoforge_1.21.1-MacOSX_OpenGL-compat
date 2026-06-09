@@ -17,6 +17,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 // --- minimal GL typedefs (avoid pulling in deprecated OpenGL headers) ------
 typedef unsigned int  GLenum;
@@ -95,13 +96,27 @@ static void mgl_glBindImageTexture(GLuint unit, GLuint texture, GLint level,
 }
 
 // --- resolution table ------------------------------------------------------
+// Data-driven so adding the DSA / image / indirect functions is a one-line edit.
+// MUST stay sorted by name (binary search). Mix of overrides (glGetString) and gap
+// fillers; the stub bodies become real Metal in Phase 2.
+typedef struct { const char* name; void* fn; } TrampEntry;
+
+static const TrampEntry TRAMPOLINES[] = {
+    { "glBindImageTexture", (void*)&mgl_glBindImageTexture },
+    { "glDispatchCompute",  (void*)&mgl_glDispatchCompute  },
+    { "glGetString",        (void*)&mgl_glGetString        },
+    { "glMemoryBarrier",    (void*)&mgl_glMemoryBarrier    },
+};
+
+static int tramp_cmp(const void* key, const void* el) {
+    return strcmp((const char*)key, ((const TrampEntry*)el)->name);
+}
+
 void* macgl_function_address(const char* gl_name) {
     if (!gl_name) return NULL;
-    // overrides
-    if (strcmp(gl_name, "glGetString") == 0)       return (void*)&mgl_glGetString;
-    // gap fillers (registered; bodies are stubs until Phase 2)
-    if (strcmp(gl_name, "glDispatchCompute") == 0) return (void*)&mgl_glDispatchCompute;
-    if (strcmp(gl_name, "glMemoryBarrier") == 0)   return (void*)&mgl_glMemoryBarrier;
-    if (strcmp(gl_name, "glBindImageTexture") == 0) return (void*)&mgl_glBindImageTexture;
-    return NULL;
+    const TrampEntry* e = (const TrampEntry*)bsearch(
+        gl_name, TRAMPOLINES,
+        sizeof(TRAMPOLINES) / sizeof(TRAMPOLINES[0]), sizeof(TRAMPOLINES[0]),
+        tramp_cmp);
+    return e ? e->fn : NULL;
 }
