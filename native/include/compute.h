@@ -33,6 +33,15 @@ void macgl_compute_destroy_pipeline(uint64_t pipeline);
 // Number of live pipelines (diagnostics/tests).
 int macgl_compute_live_pipelines(void);
 
+// --- Persistent pipeline cache (MTLBinaryArchive) -------------------------
+// The in-memory pipeline cache avoids recompiling within one run; this avoids it ACROSS
+// runs. Compiled GPU binaries are serialized to disk, so a later launch reuses them
+// instead of re-running the Metal shader compiler (a big cold-start cost). Load the
+// archive before building pipelines; save it after. Both no-op without a device.
+// Return 1 on success, 0 otherwise.
+int macgl_pipeline_cache_load(const char* path);
+int macgl_pipeline_cache_save(const char* path);
+
 #ifdef __cplusplus
 }
 #endif

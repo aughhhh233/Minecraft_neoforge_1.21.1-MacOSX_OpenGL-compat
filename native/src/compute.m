@@ -25,6 +25,9 @@ static NSLock* g_pipe_lock = nil;
 static NSMutableDictionary<NSString*, NSNumber*>* g_pipeCache = nil;
 static NSMutableDictionary<NSNumber*, NSString*>* g_pipeKeyByHandle = nil;
 
+// Cross-run persistent cache of compiled GPU binaries.
+static id<MTLBinaryArchive> g_archive = nil;
+
 static void ensure_pipe_tables(void) {
     static dispatch_once_t once;
     dispatch_once(&once, ^{
@@ -80,13 +83,27 @@ uint64_t macgl_compute_build_pipeline(const char* mslSource, const char* entryNa
         return 0;
     }
 
+    // Descriptor-based creation so we can attach the persistent binary archive: if the
+    // pipeline's binary is already in the archive, Metal reuses it instead of recompiling.
+    MTLComputePipelineDescriptor* pdesc = [[MTLComputePipelineDescriptor alloc] init];
+    pdesc.computeFunction = fn;
+    if (g_archive != nil) pdesc.binaryArchives = @[ g_archive ];
+
     id<MTLComputePipelineState> pso =
-        [ctx->device newComputePipelineStateWithFunction:fn error:&nserr];
+        [ctx->device newComputePipelineStateWithDescriptor:pdesc
+                                                   options:MTLPipelineOptionNone
+                                                reflection:NULL
+                                                     error:&nserr];
     if (pso == nil) {
         if (err && errCap > 0)
             snprintf(err, errCap, "pipeline: %s",
                      nserr ? [[nserr localizedDescription] UTF8String] : "unknown");
         return 0;
+    }
+    // Record this pipeline into the archive so a later save persists it to disk.
+    if (g_archive != nil) {
+        NSError* aerr = nil;
+        [g_archive addComputePipelineFunctionsWithDescriptor:pdesc error:&aerr];
     }
 
     MGLPipeline* p = [[MGLPipeline alloc] init];
@@ -155,4 +172,44 @@ int macgl_compute_live_pipelines(void) {
     int n = (int)g_pipes.count;
     [g_pipe_lock unlock];
     return n;
+}
+
+int macgl_pipeline_cache_load(const char* path) {
+    ensure_pipe_tables();
+    MacGLContext* ctx = macgl_context();
+    if (ctx == NULL || !ctx->ready || ctx->device == nil || path == NULL) return 0;
+
+    MTLBinaryArchiveDescriptor* d = [[MTLBinaryArchiveDescriptor alloc] init];
+    NSString* p = [NSString stringWithUTF8String:path];
+    // If a previous archive exists, seed from it; otherwise start an empty one.
+    if ([[NSFileManager defaultManager] fileExistsAtPath:p]) {
+        d.url = [NSURL fileURLWithPath:p];
+    }
+    NSError* e = nil;
+    id<MTLBinaryArchive> a = [ctx->device newBinaryArchiveWithDescriptor:d error:&e];
+    if (a == nil) {
+        NSLog(@"[MacGLCompat] binary archive load failed: %@", e ? [e localizedDescription] : @"?");
+        return 0;
+    }
+    [g_pipe_lock lock];
+    g_archive = a;
+    [g_pipe_lock unlock];
+    return 1;
+}
+
+int macgl_pipeline_cache_save(const char* path) {
+    if (path == NULL) return 0;
+    [g_pipe_lock lock];
+    id<MTLBinaryArchive> a = g_archive;
+    [g_pipe_lock unlock];
+    if (a == nil) return 0;
+
+    NSError* e = nil;
+    BOOL ok = [a serializeToURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:path]]
+                          error:&e];
+    if (!ok) {
+        NSLog(@"[MacGLCompat] binary archive save failed: %@", e ? [e localizedDescription] : @"?");
+        return 0;
+    }
+    return 1;
 }

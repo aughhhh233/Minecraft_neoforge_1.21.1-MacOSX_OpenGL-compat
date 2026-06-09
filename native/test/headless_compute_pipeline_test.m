@@ -48,6 +48,27 @@ int main(void) {
         }
     }
 
+    // Persistent binary archive: load (empty) -> build -> save -> file written.
+    const char* arch = "/tmp/macglcompat_test.metalarchive";
+    remove(arch);
+    if (macgl_pipeline_cache_load(arch)) {
+        char e2[256] = {0};
+        uint64_t p3 = macgl_compute_build_pipeline(
+            "#include <metal_stdlib>\nusing namespace metal;\n"
+            "kernel void k(device int* d [[buffer(0)]], uint i [[thread_position_in_grid]]) { d[i] = d[i] * 3; }\n",
+            "k", e2, sizeof(e2));
+        if (p3 == 0) { fprintf(stderr, "FAIL: archive pipeline build: %s\n", e2); return 1; }
+        if (!macgl_pipeline_cache_save(arch)) { fprintf(stderr, "FAIL: archive save.\n"); return 1; }
+        FILE* f = fopen(arch, "rb");
+        if (!f) { fprintf(stderr, "FAIL: archive file not written.\n"); return 1; }
+        fseek(f, 0, SEEK_END); long sz = ftell(f); fclose(f);
+        if (sz <= 0) { fprintf(stderr, "FAIL: archive file empty.\n"); return 1; }
+        printf("ok: binary archive round-trips to disk (%ld bytes).\n", sz);
+        macgl_compute_destroy_pipeline(p3);
+    } else {
+        printf("note: binary archive unavailable here; skipping archive check.\n");
+    }
+
     macgl_compute_destroy_pipeline(pipe);
     if (macgl_compute_live_pipelines() != 0) { fprintf(stderr, "FAIL: leak.\n"); return 1; }
 
