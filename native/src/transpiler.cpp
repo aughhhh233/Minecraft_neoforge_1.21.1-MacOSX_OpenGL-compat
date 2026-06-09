@@ -1,6 +1,7 @@
 // A2 implementation: GLSL compute -> SPIR-V -> MSL.
 
 #include "transpiler.h"
+#include "transpiler_c.h"
 
 #include <glslang/Public/ShaderLang.h>
 #include <glslang/Public/ResourceLimits.h>
@@ -13,6 +14,8 @@
 #include <algorithm>
 #include <unordered_map>
 #include <functional>
+#include <cstdlib>
+#include <cstring>
 
 namespace macgl {
 
@@ -186,3 +189,14 @@ std::vector<TranspileResult> transpile_compute_batch(
 }
 
 } // namespace macgl
+
+// Pure-C wrapper for the Obj-C JNI layer / addon use.
+extern "C" char* macgl_transpile_compute_to_msl(const char* glsl, int glslVersion) {
+    if (glsl == nullptr) return nullptr;
+    macgl::TranspileResult r = macgl::transpile_compute(std::string(glsl), glslVersion);
+    if (!r.ok) return nullptr;
+    char* out = static_cast<char*>(std::malloc(r.msl.size() + 1));
+    if (out == nullptr) return nullptr;
+    std::memcpy(out, r.msl.c_str(), r.msl.size() + 1);
+    return out;
+}

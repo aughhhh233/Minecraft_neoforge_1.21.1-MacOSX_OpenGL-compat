@@ -71,4 +71,10 @@ public final class NativeBridge {
      * LWJGL's original provider before the swap.
      */
     public static native void setRealFunction(String glFunctionName, long realAddress);
+
+    /**
+     * Translate a GLSL compute shader to MSL via the bundled glslang + SPIRV-Cross
+     * toolchain (pure CPU). Returns the MSL source, or {@code null} on failure.
+     */
+    public static native String transpileComputeToMsl(String glslSource, int glslVersion);
 }

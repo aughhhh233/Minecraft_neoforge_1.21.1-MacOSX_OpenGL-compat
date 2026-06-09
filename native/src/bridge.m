@@ -11,6 +11,8 @@
 #include <string.h>
 #include "macglcompat.h"
 #include "trampolines.h"
+#include "transpiler_c.h"
+#include <stdlib.h>
 
 // Device/queue bring-up + function resolution live in core.m so test executables
 // can link them without jni.h. This file is the JNI surface only.
@@ -106,4 +108,18 @@ Java_com_macglcompat_natives_NativeBridge_setRealFunction(JNIEnv* env, jclass cl
     const char* c = (*env)->GetStringUTFChars(env, name, NULL);
     macgl_set_real_function(c, (void*)(uintptr_t)addr);
     (*env)->ReleaseStringUTFChars(env, name, c);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_macglcompat_natives_NativeBridge_transpileComputeToMsl(JNIEnv* env, jclass clazz,
+                                                                jstring glsl, jint glslVersion) {
+    (void)clazz;
+    if (glsl == NULL) return NULL;
+    const char* g = (*env)->GetStringUTFChars(env, glsl, NULL);
+    char* msl = macgl_transpile_compute_to_msl(g, (int)glslVersion);
+    (*env)->ReleaseStringUTFChars(env, glsl, g);
+    if (msl == NULL) return NULL;
+    jstring out = (*env)->NewStringUTF(env, msl);
+    free(msl);
+    return out;
 }

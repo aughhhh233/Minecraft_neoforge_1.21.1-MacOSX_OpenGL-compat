@@ -1,9 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(macglcompat LANGUAGES C CXX OBJC)
 
-if(NOT DEFINED CMAKE_OSX_ARCHITECTURES)
-    set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Target architectures" FORCE)
-endif()
+# Build for the HOST architecture by default, so the test executables run natively on
+# whatever verifies them: an Apple Silicon CI runner (arm64) ships arm64; an Intel
+# Hackintosh verifier (x86_64) builds + runs x86_64. Do NOT force arm64 — that would
+# cross-compile unrunnable binaries on Intel. To ship a universal mod dylib, override:
+#   -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+# (Left unset here; CMake/clang default to the host arch.)
 
 set(CMAKE_OBJC_STANDARD 11)
 set(CMAKE_OBJC_STANDARD_REQUIRED ON)

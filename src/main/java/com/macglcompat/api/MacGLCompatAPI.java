@@ -1,5 +1,7 @@
 package com.macglcompat.api;
 
+import com.macglcompat.natives.NativeBridge;
+
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -33,9 +35,10 @@ public final class MacGLCompatAPI {
 
     private static volatile boolean active = false;
     private static final List<GLFunctionHandler> ADDON_HANDLERS = new CopyOnWriteArrayList<>();
+    private static final List<Runnable> ACTIVATION_CALLBACKS = new CopyOnWriteArrayList<>();
 
-    /** Current API version, so addons can feature-detect. */
-    public static final int API_VERSION = 1;
+    /** Current API version, so addons can feature-detect. Bumped when the surface grows. */
+    public static final int API_VERSION = 2;
 
     /**
      * @return true if the interception layer is installed and running
@@ -55,11 +58,56 @@ public final class MacGLCompatAPI {
         ADDON_HANDLERS.add(handler);
     }
 
+    /**
+     * @return true if {@code glFunctionName} is backed by this layer (overridden or
+     *         gap-filled). Lets an addon feature-detect before relying on a 4.2+ call.
+     *         Always false when the layer is inactive.
+     */
+    public static boolean isFunctionBacked(String glFunctionName) {
+        if (!active || glFunctionName == null) return false;
+        try {
+            return NativeBridge.functionAddress(glFunctionName) != 0L;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Run {@code callback} once the layer is active. If it is already active, the
+     * callback runs immediately on the calling thread; otherwise it runs when activation
+     * happens. Cleaner than polling {@link #isActive()}.
+     */
+    public static void onActivated(Runnable callback) {
+        if (callback == null) throw new IllegalArgumentException("callback must not be null");
+        if (active) { callback.run(); return; }
+        ACTIVATION_CALLBACKS.add(callback);
+    }
+
+    /**
+     * Translate a GLSL compute shader to Metal Shading Language using the bundled
+     * glslang + SPIRV-Cross toolchain. Returns the MSL source, or {@code null} if the
+     * layer is inactive or translation failed. Pure CPU; safe to call off-thread.
+     */
+    public static String transpileCompute(String glslSource, int glslVersion) {
+        if (!active || glslSource == null) return null;
+        try {
+            return NativeBridge.transpileComputeToMsl(glslSource, glslVersion);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     // ---- internal plumbing, called by core ----
 
     /** @hidden internal use only */
     public static void markActive(boolean value) {
         active = value;
+        if (value) {
+            for (Runnable cb : ACTIVATION_CALLBACKS) {
+                try { cb.run(); } catch (Throwable ignored) {}
+            }
+            ACTIVATION_CALLBACKS.clear();
+        }
     }
 
     /** @hidden internal use only — queried by InterceptingFunctionProvider */
