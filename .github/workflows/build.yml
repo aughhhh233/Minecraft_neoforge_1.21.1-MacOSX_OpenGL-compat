@@ -61,7 +61,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: native/build/_deps
-          key: deps-${{ runner.os }}-${{ hashFiles('native/CMakeLists.txt') }}
+          # Include the runner image version: a new image ships a new SDK, which
+          # invalidates glslang's precompiled headers (PCH mtime mismatch). Keying on
+          # the image busts the cache exactly when that happens.
+          key: deps-${{ runner.os }}-${{ env.ImageVersion }}-${{ hashFiles('native/CMakeLists.txt') }}
 
       - name: Configure (CMake)
         run: cmake -S native -B native/build -DCMAKE_BUILD_TYPE=Release
