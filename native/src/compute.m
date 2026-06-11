@@ -83,11 +83,17 @@ uint64_t macgl_compute_build_pipeline(const char* mslSource, const char* entryNa
         return 0;
     }
 
+    // Snapshot the archive pointer under the lock (cache_load may reassign it on another
+    // thread); use the local for the rest of this call so we never read a torn pointer.
+    [g_pipe_lock lock];
+    id<MTLBinaryArchive> archive = g_archive;
+    [g_pipe_lock unlock];
+
     // Descriptor-based creation so we can attach the persistent binary archive: if the
     // pipeline's binary is already in the archive, Metal reuses it instead of recompiling.
     MTLComputePipelineDescriptor* pdesc = [[MTLComputePipelineDescriptor alloc] init];
     pdesc.computeFunction = fn;
-    if (g_archive != nil) pdesc.binaryArchives = @[ g_archive ];
+    if (archive != nil) pdesc.binaryArchives = @[ archive ];
 
     id<MTLComputePipelineState> pso =
         [ctx->device newComputePipelineStateWithDescriptor:pdesc
@@ -101,9 +107,9 @@ uint64_t macgl_compute_build_pipeline(const char* mslSource, const char* entryNa
         return 0;
     }
     // Record this pipeline into the archive so a later save persists it to disk.
-    if (g_archive != nil) {
+    if (archive != nil) {
         NSError* aerr = nil;
-        [g_archive addComputePipelineFunctionsWithDescriptor:pdesc error:&aerr];
+        [archive addComputePipelineFunctionsWithDescriptor:pdesc error:&aerr];
     }
 
     MGLPipeline* p = [[MGLPipeline alloc] init];
